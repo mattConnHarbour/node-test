@@ -47,15 +47,15 @@ server.post('/', upload.single('file'), async (req, res, next) => {
 
     // Export the docx and create a buffer to return to the user
     const zipBuffer = await editor.exportDocx();
-    documentData = Buffer.from(zipBuffer);
+    documentData = Buffer.from(zipBuffer).toString('base64');
 
   // }
 
   // Download the file
   res
   .status(200)
-  .type(DOCX_MIME_TYPE)
-  .set('Content-Disposition', 'attachment; filename="exported-superdoc.docx"')
+  // .type(DOCX_MIME_TYPE)
+  // .set('Content-Disposition', 'attachment; filename="exported-superdoc.docx"')
   .send(documentData);
 
 })
