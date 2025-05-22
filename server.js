@@ -53,11 +53,13 @@ server.post('/', upload.single('file'), async (req, res, next) => {
   // }
 
   // Download the file
-  res
-  .status(200)
-  // .type(DOCX_MIME_TYPE)
-  .set('Content-Disposition', 'attachment; filename="exported-superdoc.docx"')
-  .send(documentData);
+  // res
+  // .status(200)
+  // // .type(DOCX_MIME_TYPE)
+  // .set('Content-Disposition', 'attachment; filename="exported-superdoc.docx"')
+  // .send(documentData);
+
+  res.download(file.path, 'document.docx');
 
 })
 
