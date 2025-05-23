@@ -12,6 +12,7 @@
   },
   "description": "",
   "dependencies": {
+    "@google-cloud/storage": "^7.16.0",
     "@harbour-enterprises/superdoc": "^0.10.44",
     "busboy": "0.3.0",
     "express": "^4.21.2",

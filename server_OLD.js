@@ -1,10 +1,8 @@
 // import './file-polyfill.js'; Import the file polyfill if using NodeJS < v22.0.0
-import fs from 'fs';
-import {readFile} from 'fs/promises';
+import fs from 'fs/promises';
 import express from 'express';
 import { JSDOM } from 'jsdom';
-// import multer from 'multer';
-import Busboy from 'busboy';
+import multer from 'multer';
 
 // In Node, we use the Editor class directly from superdoc/super-editor
 import { Editor, getStarterExtensions, getRichTextExtensions } from '@harbour-enterprises/superdoc/super-editor';
@@ -14,7 +12,7 @@ const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordproces
 // Init your server of choice. For simplicity, we use express here
 const server = express();
 
-// const upload = multer({ dest: './tmp' });
+const upload = multer({ dest: './tmp' });
 
 /**
  * A basic endpoint that appends content to the document.
@@ -28,47 +26,10 @@ server.get('/', async (req, res, next) => {
   .send("TEST GET");
 })
 
-server.post('/', async (req, res, next) => {
+server.post('/', upload.single('file'), async (req, res, next) => {
   // Load our example document - a blank template with a header and footer
-  const busboy = new Busboy({ headers: req.headers });
-let path = null;
-let document = null;
-  busboy.on('file', async (fieldname, file, filename, encoding, mimetype) => {
-    // const saveTo = path.join(__dirname, 'uploads', filename);
-    path = `./tmp/${filename}`;
-    const writeStream = fs.createWriteStream(path);
-    file.pipe(writeStream);
-    console.log(">>> TEST")
-    document = file;
-
-    writeStream.on('finish', () => {
-      const readStream = fs.createReadStream(path);
-      res
-      .status(200)
-      .type(DOCX_MIME_TYPE)
-      .set('Content-Disposition', 'attachment; filename="exported-superdoc.docx"')
-
-      readStream.pipe(res);
-    });
-  });
-
-  busboy.on('finish', async () => {
-    console.log(">>> FINISH", path)
-
-    // let documentData = await readFile(path);
-    // console.log(">>> DATA", documentData)
-    // res
-    // .status(200)
-    // .type(DOCX_MIME_TYPE)
-    // .set('Content-Disposition', 'attachment; filename="exported-superdoc.docx"')
-    // .send(documentData);
-  });
-
-  // req.pipe(busboy);
-  busboy.end(req.rawBody)
 
 
-  /*
   // Get the text and html from the query parameters
   const { text, html } = req.query;
   const {file} = req;
@@ -86,21 +47,23 @@ let document = null;
 
     // Export the docx and create a buffer to return to the user
     const zipBuffer = await editor.exportDocx();
+    // documentData = Buffer.from(zipBuffer).toString('base64');
     documentData = Buffer.from(zipBuffer);
 
   // }
 
   // Download the file
-  res
-  .status(200)
-  .type(DOCX_MIME_TYPE)
-  .set('Content-Disposition', 'attachment; filename="exported-superdoc.docx"')
-  .send(documentData);
-  */
+  // res
+  // .status(200)
+  // // .type(DOCX_MIME_TYPE)
+  // .set('Content-Disposition', 'attachment; filename="exported-superdoc.docx"')
+  // .send(documentData);
+
+  res.download(file.path, 'document.docx');
 
 })
 
-server.listen(8080, '0.0.0.0', () => console.debug(`Server running on port 8080`));
+server.listen(process.env.PORT || 8080, '0.0.0.0', () => console.debug(`Server running on port 8080`));
 
 
 /**
