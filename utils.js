@@ -42,7 +42,7 @@ const getAIResponse = async (editor) => {
   const xml = editor.state.doc.textContent;
   const prompt = `
   Find the phrase after which a GDPR clause should be inserted: "${xml}"
-  Then, generate a GDPR clause. Return your results in a JSON response, "phrase" and "clause" as keys.`;
+  Then, generate a GDPR clause. Do not include placeholders or templating. Return your results in a JSON response, "phrase" and "clause" as keys.`;
 
   const payload = {
     stream: true,
@@ -75,6 +75,7 @@ const getClauseAndPosition = async ({AIResponse, editor}) => {
   const result = await getDataFromStreamedResult(AIResponse);
   const json = getJSONFromResult(result);
   const {phrase, clause} = json;
+  console.log("Phrase to insert after:", phrase);
 
   const position = getClausePosition(editor, phrase);
 
@@ -161,7 +162,10 @@ const generateUploadDownloadUrls = async (objectName) => {
 // Editor utils
 const getClausePosition = (editor, phrase) => {
   const searchResult = editor.commands.search(phrase).pop();
-  if (!searchResult) return null;
+  if (!searchResult) {
+    console.log("Clause insert position not found");
+    return null;
+  }
   const {from, to} = searchResult;
   return to;
 }
