@@ -11,12 +11,10 @@ import { dirname } from 'path';
 import {
   getAIResponse,
   generateUploadDownloadUrls,
-  positionCursor,
   getClauseAndPosition,
   uploadToSignedUrl,
   insertSuggestion,
   getEditor,
-  DOCX_MIME_TYPE
 } from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);

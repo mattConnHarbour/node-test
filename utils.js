@@ -1,4 +1,4 @@
-import { TextSelection } from 'prosemirror-state';
+import { TextSelection, Selection } from 'prosemirror-state';
 import { Storage } from '@google-cloud/storage';
 import { JSDOM } from 'jsdom';
 import https from 'https';
@@ -8,7 +8,8 @@ import { Editor, getStarterExtensions } from '@harbour-enterprises/superdoc/supe
 
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-const getStreamedResult = async (response) => {
+// AI Utils
+const getDataFromStreamedResult = async (response) => {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let result = "";
@@ -70,14 +71,8 @@ const getAIResponse = async (editor) => {
   return response;
 }
 
-const getClausePosition = (editor, phrase) => {
-  const searchResult = editor.commands.search(phrase).pop();
-  const {from, to} = searchResult;
-  return to;
-}
-
 const getClauseAndPosition = async ({AIResponse, editor}) => {
-  const result = await getStreamedResult(AIResponse);
+  const result = await getDataFromStreamedResult(AIResponse);
   const json = getJSONFromResult(result);
   const {phrase, clause} = json;
 
@@ -163,20 +158,26 @@ const generateUploadDownloadUrls = async (objectName) => {
   return urls;
 }
 
+// Editor utils
+const getClausePosition = (editor, phrase) => {
+  const searchResult = editor.commands.search(phrase).pop();
+  if (!searchResult) return null;
+  const {from, to} = searchResult;
+  return to;
+}
 
 const positionCursor = (editor, toPos) => {
-const selection = new TextSelection(editor.view.state.doc.resolve(toPos+1));
-const tr = editor.view.state.tr.setSelection(selection);
-const state = editor.view.state.apply(tr)
-editor.view.updateState(state)
+  let selection = null;
+  if (!toPos) {
+    selection = Selection.atEnd(editor.view.docView.node)
+  } else {
+    selection = new TextSelection(editor.view.state.doc.resolve(toPos+1));
+  }
+  const tr = editor.view.state.tr.setSelection(selection);
+  const state = editor.view.state.apply(tr)
+  editor.view.updateState(state)
 };
 
-
-/**
- * Loads the editor with the document data
- * @param {Buffer} docxFileBuffer The docx file as a Buffer
- * @returns {Promise<Editor>} The Super Editor instance
- */
 const getEditor = async (docxFileBuffer) => {
   // For now, this is boilerplate code to mock the window and document
   const { window: mockWindow } = (new JSDOM('<!DOCTYPE html><html><body></body></html>'));
@@ -213,7 +214,7 @@ const insertSuggestion = ({editor, position, clause}) => {
   editor.setDocumentMode("suggesting");
   editor.commands.enableTrackChanges();
   positionCursor(editor, position);
-  editor.commands.insertContent(`${clause}`);
+  editor.commands.insertContent(`<br /><br />${clause}<br /><br />`);
 };
 
 export {
