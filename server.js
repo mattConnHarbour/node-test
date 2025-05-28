@@ -9,18 +9,85 @@ import { Storage } from '@google-cloud/storage';
 import path from 'path'
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import https from 'https'
+import https from 'https';
+import { TextSelection } from 'prosemirror-state';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // In Node, we use the Editor class directly from superdoc/super-editor
-import { Editor, getStarterExtensions, getRichTextExtensions } from '@harbour-enterprises/superdoc/super-editor';
+import { Editor, getStarterExtensions, Toolbar } from '@harbour-enterprises/superdoc/super-editor';
 
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 // Init your server of choice. For simplicity, we use express here
 const server = express();
+
+const positionCursor = (editor, toPos) => {
+  const selection = new TextSelection(editor.view.state.doc.resolve(toPos+1));
+  const tr = editor.view.state.tr.setSelection(selection);
+  const state = editor.view.state.apply(tr)
+  editor.view.updateState(state)
+};
+
+const streamData = async (response) => {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let result = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        console.log('Stream finished');
+        break;
+      }
+      const textChunk = decoder.decode(value);
+      result += textChunk;
+    }
+
+    let jsonString = result.split('```')[1];
+    jsonString = jsonString.replace('json\n{','{');
+    return JSON.parse(jsonString);
+  } catch (error) {
+    console.error('Error reading stream:', error);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+const apiEndpoint = "https://sd-dev-express-gateway-i6xtm.ondigitalocean.app/insights";
+const getAIContent = async (editor) => {
+  const xml = editor.state.doc.textContent;
+  // console.log("XML:", xml)
+
+  const payload = {
+    "stream": true,
+    "context": "You are an expert copywriter and you are immersed in a document editor. You are to provide document related text responses based on the user prompts. Only write what is asked for. Do not provide explanations. Try to keep placeholders as short as possible. Do not output your prompt. Your instructions are: ",
+    "insights": [
+        {
+        "type": "custom_prompt",
+        "name": "text_generation",
+        "message": `Find the phrase after which a GDPR clause should be inserted: "${xml}"
+          Then, generate a GDPR clause. Return your results in a JSON response, "phrase" and "clause" as keys.
+        `,
+        "format": [{ "value": "" }]
+        }
+    ],
+    "document_content": xml
+    }
+
+  const response = await fetch(apiEndpoint, {
+    method: 'POST',
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload),
+  });
+  const result = await streamData(response);
+
+  return result;
+}
 
 const generateSignedUrl = async (bucketName, objectName, expirationTime, action) => {
   const storage = new Storage();
@@ -86,20 +153,54 @@ server.post('/', async (req, res, next) => {
 
     // init editor & modify document
     let documentData = await readFile(filePath);
+    // TODO - handle atob error
     let editor = null;
     try {
       editor = await getEditor(documentData);
     } catch (e) {
-      res.status(200).send('ERROR');
+      res.status(200).send("ERROR");
+      return;
     }
-    editor.commands.insertContent("TEXT INSERT");
+    const aiResult = await getAIContent(editor);
+    const {phrase, clause} = aiResult;
+    console.log(">>> Phrase replaced", phrase);
+    const searchResult = editor.commands.search(phrase).pop();
+    // console.log(">>> search result", searchResult);
+    const {from, to} = searchResult;
+    console.log(">>> FROM, TO", from, to)
+    // console.log(">>> CONTENT", clause);
+    editor.setDocumentMode("suggesting");
+    editor.commands.enableTrackChanges();
+    positionCursor(editor, {from, to});
+    editor.commands.insertContent(`\n${clause}\n`);
+    // editor.commands.insertContentAt({ from, to, }, phrase, {});
+    // // Wrap the raw content in a span with our animation class and unique ID
+    // const wrappedContent = {
+    //   type: "text",
+    //   marks: [
+    //     {
+    //       type: "aiAnimationMark",
+    //       attrs: {
+    //         class: "sd-ai-text-appear",
+    //         dataMarkId: `ai-animation-${Date.now()}`,
+    //       },
+    //     },
+    //   ],
+    //   text: content,
+    // };
+
+    // Insert the raw content with animation mark
+    // editor.commands.insertContent(wrappedContent);
+    // editor.commands.insertContent(clause);
+    // editor.commands.insertContentAt({ from: 0, to: 1 }, content, {});
 
     // Export the docx and create a buffer to return to the user
     let zipBuffer = null;
     try {
       zipBuffer = await editor.exportDocx();
     } catch (e) {
-      res.status(200).send('ERROR');
+      res.status(200).send("ERROR");
+      return;
     }
     documentData = Buffer.from(zipBuffer);
 
@@ -157,6 +258,13 @@ const getEditor = async (docxFileBuffer) => {
   // console.log(">>> CONTENT", content)
 
   return new Editor({
+    user: {
+      name: "Superdoc",
+      // email: "matthew@harbourshare.com",
+      email: null,
+      image: null
+    },
+
     isHeadless: true,
 
     // We pass in the mock document and window here
