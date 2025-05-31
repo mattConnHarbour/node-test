@@ -41,8 +41,15 @@ const getJSONFromResult = (AIResult) => {
 const getAIResponse = async (editor) => {
   const xml = editor.state.doc.textContent;
   const prompt = `
-  Find the phrase after which a GDPR clause should be inserted: "${xml}"
-  Then, generate a GDPR clause. Do not include placeholders or templating. Return your results in a JSON response, "phrase" and "clause" as keys.`;
+  Find the phrase after which a GDPR clause should be inserted, then find the phrase after: "${xml}"
+  Then, generate a GDPR clause. Do not include placeholders or templating.
+  Return your results in a JSON response like this:
+  {
+    clauseBefore,
+    clause,
+    clauseAfter
+  }
+  `;
 
   const payload = {
     stream: true,
@@ -71,18 +78,29 @@ const getAIResponse = async (editor) => {
   return response;
 }
 
-const getClauseAndPosition = async ({AIResponse, editor}) => {
+const getDataFromAIResponse = async ({AIResponse, editor}) => {
   const result = await getDataFromStreamedResult(AIResponse);
   const json = getJSONFromResult(result);
-  const {phrase, clause} = json;
-  console.log("Phrase to insert after:", phrase);
+  const {
+    clauseBefore,
+    clause,
+    clauseAfter,
+  } = json;
+  console.log("Phrase to insert after:", clauseBefore);
 
-  const position = getClausePosition(editor, phrase);
+  const position = getClausePosition(editor, clauseBefore);
 
-  return {clause, position};
+  return {
+    position,
+    clauseBefore,
+    clause,
+    clauseAfter,
+  };
 }
 
 const generateSignedUrl = async (bucketName, objectName, expirationTime, action) => {
+  console.log(`>>> generateSignedUrl (${action}) - bucketName:`, bucketName)
+  console.log(`>>> generateSignedUrl (${action}) - objectName:`, objectName)
   const storage = new Storage();
   const bucket = storage.bucket(bucketName);
   const file = bucket.file(objectName);
@@ -221,13 +239,20 @@ const insertSuggestion = ({editor, position, clause}) => {
   editor.commands.insertContent(`<br /><br />${clause}<br /><br />`);
 };
 
+const generateRandomFilename = () => {
+  const randomNum = String(Date.now())+Math.floor(Math.random()*1E9);
+  return `file_${randomNum}.docx`
+}
+
 export {
   getAIResponse,
   generateUploadDownloadUrls,
   uploadToSignedUrl,
   positionCursor,
   getEditor,
-  getClauseAndPosition,
+  getDataFromAIResponse,
+  getClausePosition,
   insertSuggestion,
-  DOCX_MIME_TYPE
+  DOCX_MIME_TYPE,
+  generateRandomFilename
 }

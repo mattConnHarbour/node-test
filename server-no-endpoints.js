@@ -14,9 +14,7 @@ import {
   getDataFromAIResponse,
   uploadToSignedUrl,
   insertSuggestion,
-  getClausePosition,
   getEditor,
-  generateRandomFilename
 } from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,7 +29,7 @@ server.get('/', async (req, res, next) => {
   .send("TEST GET");
 })
 
-server.post('/text', async (req, res, next) => {
+server.post('/', async (req, res, next) => {
   let filePath = null;
   let uploadedFileName = null;
 
@@ -48,65 +46,9 @@ server.post('/text', async (req, res, next) => {
 
   // save file
   busboy.on('file', async (fieldname, file, filename, encoding, mimetype) => {
-    uploadedFileName = filename || generateRandomFilename();
-    filePath = path.join(__dirname, uploadedFileName);
+    filePath = path.join(__dirname, filename);
+    uploadedFileName = filename;
     file.pipe(fs.createWriteStream(filePath));
-  });
-
-  // after file save
-  busboy.on("finish", async () => {
-    let documentData = await readFile(filePath);
-
-    let editor = null;
-    try {
-      editor = await getEditor(documentData);
-    } catch (e) {
-      res.status(200).send({
-        success: false
-      });
-      return;
-    }
-
-    const text = editor.state.doc.textContent;
-
-    // respond with download url
-    res.status(200).send({
-      success: true,
-      text
-    });
-  });
-
-  req.pipe(busboy);
-  // busboy.end(req.rawBody)
-})
-
-server.post('/insert', async (req, res, next) => {
-  let filePath = null;
-  let uploadedFileName = null;
-
-  let busboy = null;
-  // missing headers?
-  try {
-    busboy = new Busboy({ headers: req.headers });
-  } catch (e) {
-    res.status(200).send({
-      success: false
-    });
-    return;
-  }
-
-  const fields = {};
-  busboy.on('field', (fieldname, value) => {
-    fields[fieldname] = value;
-  });
-
-  // save file
-  busboy.on('file', async (fieldname, file, filename, encoding, mimetype) => {
-    uploadedFileName = filename || generateRandomFilename();
-    filePath = path.join(__dirname, uploadedFileName);
-    file.pipe(fs.createWriteStream(filePath));
-
-    console.log(">>> Uploaded file name:", uploadedFileName);
   });
 
   // after file save
@@ -131,19 +73,13 @@ server.post('/insert', async (req, res, next) => {
     }
     
     // generate clause and find position
-    // const AIResponse = await getAIResponse(editor);
-    // const {
-    //   clauseBefore,
-    //   clause,
-    //   clauseAfter,
-    //   position
-    // } = await getDataFromAIResponse({AIResponse, editor});
-
-    const clause = fields['clause'];
-    const clauseBefore = fields['clause-before'];
-    const clauseAfter = fields['clause-after'];
-
-    const position = getClausePosition(editor, clauseBefore);
+    const AIResponse = await getAIResponse(editor);
+    const {
+      clauseBefore,
+      clause,
+      clauseAfter,
+      position
+    } = await getDataFromAIResponse({AIResponse, editor});
 
     // insert suggestion
     insertSuggestion({editor, position, clause});
@@ -167,9 +103,9 @@ server.post('/insert', async (req, res, next) => {
     res.status(200).send({
       success: true,
       file: downloadUrl,
-      // clauseBefore,
-      // clause,
-      // clauseAfter,
+      clauseBefore,
+      clause,
+      clauseAfter,
     });
   });
 
